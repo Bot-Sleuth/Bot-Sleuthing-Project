@@ -1,0 +1,33 @@
+---
+title: "Bot Sleuth Supplementary Info_06.03.2024"
+author: "Abbie Clapp"
+date: "2026-06-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### ISP Names
+
+**Moved this to supplementary since for national data this would be really useful, but with our SONA data it's not helpful at all since almost everyone is completing the survey on UW-Campus and will show up with the same ISP.**
+
+# AC note: not fully sure how to incorporate these. but, a way to automate this could be to calculate these counts, then feed in the ISP names with counts above a certain threshold into the previous code where we're flagging specific names. 
+
+```{r}
+isp_counts <- bind_rows(
+  combined_results |> count(ipapi_isp,  name = "n") |> rename(isp = ipapi_isp) |> mutate(source = "ipapi_isp"),
+  combined_results |> count(ipinfo_org, name = "n") |> rename(isp = ipinfo_org) |> mutate(source = "ipinfo_org"),
+    combined_results |> count(ipapi_org, name = "n") |> rename(isp = ipapi_org) |> mutate(source = "ipapi_org"),
+      combined_results |> count(ipapi_as, name = "n") |> rename(isp = ipapi_as) |> mutate(source = "ipapi_as"),
+        combined_results |> count(ipquery_isp.isp, name = "n") |> rename(isp = ipquery_isp.isp) |> mutate(source = "ipquery_isp"),
+          combined_results |> count(freeipapi_asnOrganization, name = "n") |> rename(isp = freeipapi_asnOrganization) |> mutate(source = "freeipapi_asn")
+)
+isp_counts
+
+
+# ipapi_isp,ipapi_org,ipapi_as,ipinfo_org,ipquery_isp.isp,freeipapi_asnOrganization
+```
+
+**Add code taking ISP names for col n > some threshold (5?) and putting them into a vector, then flagging any cases in the dataset where any ISP names contain any string that vector**
