@@ -67,6 +67,7 @@ def fill_radio(radios: list[webdriver.remote.webelement.WebElement], driver: web
     else:
         radios[rand_idx].click()
 
+
 def fill_slider(track: webdriver.remote.webelement.WebElement, driver: webdriver.remote.webdriver.WebDriver) -> None:
     """
     Set a Qualtrics slider to a random value using keyboard navigation.
@@ -81,6 +82,7 @@ def fill_slider(track: webdriver.remote.webelement.WebElement, driver: webdriver
     # Focus then navigate with real keyboard events (ARIA slider pattern)
     driver.execute_script("arguments[0].focus();", track)
     track.send_keys(Keys.HOME + Keys.ARROW_RIGHT * rand_val)
+
 
 def click_next(driver: webdriver.remote.webdriver.WebDriver  ) -> None:
     """
@@ -117,7 +119,6 @@ def loop_through_elements(root: Union[webdriver.remote.webdriver.WebDriver, webd
         elem = fresh_elements[i]
 
         fn(elem, *args, **kwargs)
-
 
 
 def main() -> None:
@@ -196,8 +197,6 @@ def main() -> None:
             # Get slider
             for track in q.find_elements(By.CSS_SELECTOR, "div.track"):
                 fill_slider(track, driver)
-
-
 
 
         input("Press Enter to move to the next page")

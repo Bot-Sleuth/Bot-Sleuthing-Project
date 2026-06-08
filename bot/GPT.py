@@ -1,4 +1,6 @@
 import os
+import re
+import json
 from typing import Optional, List, Dict
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -86,4 +88,60 @@ class GPT():
 
         return reply
 
+
+    def prompt_json(self, input:str) -> dict:
+        """
+        Request a JSON object response using structured output.
+
+        Args:
+            input (str): User prompt input.
+
+        Returns:
+            dict: JSON dictionary.
+        """
+        
+        messages: List[Dict] = self.history(include_fewshot=True)
+        user_msg = {"role": "user", "content": input}
+        messages = messages + [user_msg]
+
+        try:
+            params = dict(
+                model=self._model,
+                messages=messages,
+                response_format={"type": "json_object"},
+            )
+
+            resp = self._client.chat.completions.create(**params)
+
+            reply = resp.choices[0].message.content or "{}"
+
+        except Exception:
+            reply = self.prompt(input)
+            reply = self._extract_json(reply)
+
+        reply = json.loads(reply)
+
+        return reply
+    
+    
+    def _extract_json(self, text:str) -> str:
+        """
+        Extract the largest JSON object from free-form text.
+
+        Args:
+            text (str): Raw model output possibly containing prose.
+
+        Returns:
+            str: JSON string (object) if found, else original text.
+        """
+        
+        matches = list(re.finditer(r"\{.*\}", text, flags=re.DOTALL))
+        if not matches:
+            return text
+        start, end = matches[0].span()
+        for m in matches[1:]:
+            s, e = m.span()
+            if (e - s) > (end - start):
+                start, end = s, e
+        return text[start:end]
 
