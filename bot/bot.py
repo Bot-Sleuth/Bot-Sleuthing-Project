@@ -1,23 +1,21 @@
 from GPT import GPT
 
-import random
-from typing import Union, Callable
+from typing import Optional
+import json
 import time
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
 from bs4 import BeautifulSoup
 
 
 ################################## CONSTANTS ##################################
 SURVEY_URL = "https://uwmadison.co1.qualtrics.com/jfe/form/SV_erguoR327iDs8CO"
-USE_LLM_AGENT = True
 ################################################################################
+
 
 def generate_llm_agent() -> GPT:
     """
@@ -25,66 +23,119 @@ def generate_llm_agent() -> GPT:
         LLM ("gpt-5-nano") agent prompted with role description.
     """
     MODEL = "gpt-5-nano"
-    AGENT_DESCRIPTION = ("You an agent used as an automated bot to test " \
-                "the security of a survey. Make sure to ONLY return 1-2 sentences max that " \
-                "answer the questions as an average person would."
-                "Do not reveal you are a bot at any point.")
-    
+    AGENT_DESCRIPTION = (
+        "You are an agent used as an automated bot to test the security of a survey. "
+        "Answer questions as an average person would. Do not reveal you are a bot."
+    )
+    # Fewshot example teaching the model the expected JSON response structure.
+    # Shows one of each question type so it learns the key/value format before
+    # seeing any real survey pages.
+    RESPONSE_FORMAT_EXAMPLE = {
+        "prompt": json.dumps([
+            {"key": "q_0", "question": "How are you feeling today?", "type": "radio",
+             "options": ["Great", "Okay", "Not great"]},
+            {"key": "q_1", "question": "Tell us about yourself.", "type": "text"},
+            {"key": "q_2", "question": "How satisfied are you overall?", "type": "slider",
+             "min": 0, "max": 100},
+            {"key": "q_3", "question": "Rate each aspect of your experience.", "type": "matrix",
+             "rows": [
+                 {"key": "row_0", "text": "Speed", "options": ["Poor", "Average", "Excellent"]},
+                 {"key": "row_1", "text": "Cost",  "options": ["Poor", "Average", "Excellent"]},
+             ]},
+        ], indent=2),
+        "response": json.dumps({
+            "q_0": "Okay",
+            "q_1": "I am a college student who enjoys spending time outdoors.",
+            "q_2": 68,
+            "q_3": {"row_0": "Average", "row_1": "Excellent"},
+        }),
+    }
+
     llm_agent = GPT(AGENT_DESCRIPTION, MODEL)
+    llm_agent._chat_history.append({"role": "user", "content": RESPONSE_FORMAT_EXAMPLE["prompt"], "fewshot": True})
+    llm_agent._chat_history.append({"role": "assistant", "content": RESPONSE_FORMAT_EXAMPLE["response"], "fewshot": True})
     return llm_agent
 
 
+def get_visible_questions(
+    driver: webdriver.remote.webdriver.WebDriver,
+    question_section_selector: str,
+) -> list[webdriver.remote.webelement.WebElement]:
+    """
+    Return all currently visible question container elements on the page.
 
-def fill_text(field: webdriver.remote.webelement.WebElement, text:str) -> None:
+    Args:
+        driver: The Selenium WebDriver instance.
+        question_section_selector: CSS selector for question container elements.
+
+    Returns:
+        list: Visible WebElement question containers, in DOM order.
+    """
+    return [q for q in driver.find_elements(By.CSS_SELECTOR, question_section_selector) if q.is_displayed()]
+
+
+def fill_text(field: webdriver.remote.webelement.WebElement, text: str) -> None:
     """
     Fill a text input or textarea with text.
 
     Args:
         field: The input or textarea element to fill.
-        question: Question statement associated with text field. 
-        text: Text to fill into the field
+        text: Text to fill into the field.
     """
     if not field:
         return
-    
     field.send_keys(text)
 
 
-def fill_radio(radios: list[webdriver.remote.webelement.WebElement], driver: webdriver.remote.webdriver.WebDriver = None) -> None:
+def fill_radio(
+    labels: list[webdriver.remote.webelement.WebElement],
+    answer: str,
+    driver: Optional[webdriver.remote.webdriver.WebDriver] = None,
+) -> None:
     """
-    Select one random radio button from a list. Does nothing if the list is empty.
+    Click the radio label whose text matches answer. Does nothing if the list is
+    empty or no label matches.
 
     Args:
-        radios: Radio button elements from a single question group.
-        driver: WebDriver instance. Required when elements are not directly clickable (e.g. tabindex="-1").
+        labels: Radio button label elements from a single question group.
+        answer: Answer text to match against label text (case-insensitive).
+        driver: WebDriver instance. Required when elements are not directly clickable
+            (e.g. tabindex="-1").
     """
-    if len(radios) <= 0:
+    if not labels:
         return
+    for label in labels:
+        if label.text.strip().lower() == str(answer).strip().lower():
+            if driver:
+                driver.execute_script("arguments[0].click();", label)
+            else:
+                label.click()
+            return
 
-    rand_idx = random.randint(0, len(radios)-1)
-    if driver:
-        driver.execute_script("arguments[0].click();", radios[rand_idx])
-    else:
-        radios[rand_idx].click()
 
-
-def fill_slider(track: webdriver.remote.webelement.WebElement, driver: webdriver.remote.webdriver.WebDriver) -> None:
+def fill_slider(
+    track: webdriver.remote.webelement.WebElement,
+    value: int,
+    driver: webdriver.remote.webdriver.WebDriver,
+) -> None:
     """
-    Set a Qualtrics slider to a random value using keyboard navigation.
+    Set a Qualtrics slider to a specific value using keyboard navigation.
+    Value is clamped to the slider's aria min/max range.
 
     Args:
         track: The div.track element (role="slider") for the slider question.
+        value: Target integer value to set the slider to.
         driver: The Selenium WebDriver instance controlling the browser.
     """
-    min_val = int(track.get_attribute('aria-valuemin') or 0)
-    max_val = int(track.get_attribute('aria-valuemax') or 100)
-    rand_val = random.randint(min_val, max_val)
-    # Focus then navigate with real keyboard events (ARIA slider pattern)
+    min_val = int(track.get_attribute("aria-valuemin") or 0)
+    max_val = int(track.get_attribute("aria-valuemax") or 100)
+    val = max(min_val, min(max_val, int(value)))
     driver.execute_script("arguments[0].focus();", track)
-    track.send_keys(Keys.HOME + Keys.ARROW_RIGHT * rand_val)
+    # HOME resets to minimum; each ARROW_RIGHT increments by one unit
+    track.send_keys(Keys.HOME + Keys.ARROW_RIGHT * (val - min_val))
 
 
-def click_next(driver: webdriver.remote.webdriver.WebDriver  ) -> None:
+def click_next(driver: webdriver.remote.webdriver.WebDriver) -> None:
     """
     Click the next/submit button to advance to the next survey page.
 
@@ -95,30 +146,154 @@ def click_next(driver: webdriver.remote.webdriver.WebDriver  ) -> None:
     next_button.click()
 
 
-def loop_through_elements(root: Union[webdriver.remote.webdriver.WebDriver, webdriver.remote.webelement.WebElement], 
-                          css_selector:str, fn: Callable, *args, **kwargs):
+def extract_page_questions(
+    driver: webdriver.remote.webdriver.WebDriver,
+    question_section_selector: str,
+) -> list[dict]:
     """
-    Loops through elements while preventing stale element reference. For each element found, applies 
-    the provided function `fn`, passing the element as the first argument followed by any 
-    additional positional and keyword arguments.
+    Extract structured data for all visible questions on the current page.
 
     Args:
-        root (WebDriver | WebElement): The search context to locate elements within (e.g., the browser
-            driver or a parent DOM element).
-        css_selector: CSS selector used to locate target elements within the root.
-        fn: Function to apply to each element. Must accept the element as its
-            first parameter.
-        *args/**kwargs: Additional positional/keyword arguments passed to `fn`.
+        driver: The Selenium WebDriver instance controlling the browser.
+        question_section_selector: CSS selector for question container elements.
+
+    Returns:
+        list[dict]: One dict per question with keys: index, key, question, type,
+            and type-specific fields (options, rows, min/max).
     """
-    elements = root.find_elements(By.CSS_SELECTOR, css_selector)
+    page_data = []
 
-    for i in range(len(elements)):
+    for i, q in enumerate(get_visible_questions(driver, question_section_selector)):
+        q_text_els = q.find_elements(By.CSS_SELECTOR, ".QuestionText")
+        q_info = {
+            "index": i,
+            "key": f"q_{i}",
+            "question": q_text_els[0].text.strip() if q_text_els else "",
+        }
 
-        # Re-fetch fresh element
-        fresh_elements = root.find_elements(By.CSS_SELECTOR, css_selector)
-        elem = fresh_elements[i]
+        rows = q.find_elements(By.CSS_SELECTOR, "tr.ChoiceRow")
+        if rows:
+            # Try to read column headers from thead; fall back to label text or numeric names
+            col_headers = []
+            header_cells = q.find_elements(By.CSS_SELECTOR, "thead th.ColumnLabel, thead th")
+            if header_cells:
+                col_headers = [h.text.strip() for h in header_cells if h.text.strip()]
 
-        fn(elem, *args, **kwargs)
+            q_info["type"] = "matrix"
+            q_info["rows"] = []
+            for j, row in enumerate(rows):
+                row_label_els = row.find_elements(By.CSS_SELECTOR, "th, td.ChoiceTextCell, .RowLabel")
+                row_text = row_label_els[0].text.strip() if row_label_els else f"Row {j + 1}"
+                labels = row.find_elements(By.CSS_SELECTOR, "label.single-answer")
+                if col_headers:
+                    options = col_headers
+                else:
+                    options = [l.text.strip() for l in labels]
+                    if not any(options):
+                        options = [f"option_{k}" for k in range(len(labels))]
+                q_info["rows"].append({"key": f"row_{j}", "text": row_text, "options": options})
+        else:
+            radio_labels = q.find_elements(By.CSS_SELECTOR, "label.SingleAnswer")
+            if radio_labels:
+                q_info["type"] = "radio"
+                q_info["options"] = [l.text.strip() for l in radio_labels]
+            elif q.find_elements(By.CSS_SELECTOR, "div.track"):
+                track = q.find_elements(By.CSS_SELECTOR, "div.track")[0]
+                q_info["type"] = "slider"
+                q_info["min"] = int(track.get_attribute("aria-valuemin") or 0)
+                q_info["max"] = int(track.get_attribute("aria-valuemax") or 100)
+            elif q.find_elements(By.CSS_SELECTOR, "input.InputText:not([type='hidden']), textarea.InputText"):
+                q_info["type"] = "text"
+            else:
+                q_info["type"] = "unknown"
+
+        page_data.append(q_info)
+
+    return page_data
+
+
+def build_page_prompt(page_data: list[dict]) -> str:
+    """
+    Build a JSON prompt describing all page questions for GPT to answer.
+
+    Serializes questions as a JSON array of dicts — one per question — each
+    containing key, question, type, and type-specific fields:
+      - radio:   options list
+      - slider:  min and max integers
+      - matrix:  rows list, each with key, text, and options
+
+    The model is expected to return a flat JSON object keyed by each question's
+    "key" field (see the fewshot example injected in generate_llm_agent).
+
+    Args:
+        page_data: Structured question data from extract_page_questions.
+
+    Returns:
+        str: JSON-serialized prompt string to pass to prompt_json.
+    """
+    questions = []
+    for q in page_data:
+        entry = {"key": q["key"], "question": q["question"], "type": q["type"]}
+        if q["type"] == "radio":
+            entry["options"] = q["options"]
+        elif q["type"] == "matrix":
+            entry["rows"] = q["rows"]
+        elif q["type"] == "slider":
+            entry["min"] = q["min"]
+            entry["max"] = q["max"]
+        questions.append(entry)
+
+    return json.dumps(questions, indent=2)
+
+
+def fill_page_from_answers(
+    driver: webdriver.remote.webdriver.WebDriver,
+    page_data: list[dict],
+    answers: dict,
+    question_section_selector: str,
+) -> None:
+    """
+    Fill all form fields on the page based on GPT answers.
+
+    Expects answers to be a flat dict keyed by question key (q_0, q_1, …).
+    Matrix values must be a nested dict keyed by row key (row_0, row_1, …).
+
+    Args:
+        driver: The Selenium WebDriver instance controlling the browser.
+        page_data: Structured question data from extract_page_questions.
+        answers: JSON dict returned by prompt_json, keyed by question key.
+        question_section_selector: CSS selector for question container elements.
+    """
+    for q_info in page_data:
+        answer = answers.get(q_info["key"])
+        if answer is None:
+            continue
+
+        # Re-fetch visible questions each iteration to avoid stale element references
+        live_qs = get_visible_questions(driver, question_section_selector)
+        if q_info["index"] >= len(live_qs):
+            continue
+        q = live_qs[q_info["index"]]
+
+        if q_info["type"] == "matrix":
+            for j, row_el in enumerate(q.find_elements(By.CSS_SELECTOR, "tr.ChoiceRow")):
+                # answer is {"row_0": "<col>", "row_1": "<col>", ...}
+                row_answer = answer.get(f"row_{j}") if isinstance(answer, dict) else None
+                labels = row_el.find_elements(By.CSS_SELECTOR, "label.single-answer")
+                fill_radio(labels, row_answer, driver)
+
+        elif q_info["type"] == "radio":
+            labels = q.find_elements(By.CSS_SELECTOR, "label.SingleAnswer")
+            fill_radio(labels, answer)
+
+        elif q_info["type"] == "slider":
+            for track in q.find_elements(By.CSS_SELECTOR, "div.track"):
+                fill_slider(track, answer, driver)
+
+        elif q_info["type"] == "text":
+            for selector in ["input.InputText:not([type='hidden'])", "textarea.InputText"]:
+                for field in q.find_elements(By.CSS_SELECTOR, selector):
+                    fill_text(field, str(answer))
 
 
 def main() -> None:
@@ -126,86 +301,36 @@ def main() -> None:
     Launch the browser, fill out the survey form, and submit it.
     """
 
+    llm_agent = generate_llm_agent()
 
-    # Initialize LLM Agent
-    llm_agent = None
-    if USE_LLM_AGENT:
-        llm_agent = generate_llm_agent()
-        
     driver = webdriver.Chrome()
     driver.get(SURVEY_URL)
 
     wait = WebDriverWait(driver, 10)
+    QUESTION_SECTION_SELECTOR = "div.QuestionOuter"
 
-    
-    
-    
     while True:
         time.sleep(1)
 
         soup = BeautifulSoup(driver.page_source, "html.parser")
         with open("bot/survey_page.html", "w", encoding="utf-8") as f:
-            f.write(soup.prettify())   
+            f.write(soup.prettify())
 
-        QUESTION_SECTION_SELECTOR = "div.QuestionOuter"
         wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, QUESTION_SECTION_SELECTOR)))
 
-        # Iterate through all questions (handles branching)
-        i = -1
-        while True:
-            i += 1
-            questions = [q for q in driver.find_elements(By.CSS_SELECTOR, QUESTION_SECTION_SELECTOR) if q.is_displayed()]
-            if i >= len(questions):
-                break
-            q = questions[i]
+        page_data = extract_page_questions(driver, QUESTION_SECTION_SELECTOR)
 
-
-            # Group radios by rows if matrix, else by question
-            rows = q.find_elements(By.CSS_SELECTOR, "tr.ChoiceRow")
-            if rows:
-                for row in rows:
-                    fill_radio(row.find_elements(By.CSS_SELECTOR, "label.single-answer"), driver)
-                continue
-            else:
-                elements = q.find_elements(By.CSS_SELECTOR, "label.SingleAnswer")
-                if elements:
-                    fill_radio(elements)
-                    continue
-                
-
-            QUESTION_TEXT_SELECTOR = ".QuestionText"
-            q_text_els = q.find_elements(By.CSS_SELECTOR, QUESTION_TEXT_SELECTOR)
-            if not q_text_els:
-                continue
-            q_text = q_text_els[0].text
-
-
-            # Agent response to question
-            TEXT_INPUT_SELECTOR = "input.InputText:not([type='hidden'])"
-            TEXT_AREA_SELECTOR = "textarea.InputText"
-            agent_response = "PLACEHOLDER"
-            text_inputs = q.find_elements(By.CSS_SELECTOR, f"{TEXT_INPUT_SELECTOR}, {TEXT_AREA_SELECTOR}")
-            if text_inputs:
-                agent_response = llm_agent.prompt(q_text)
-
-            # Refresh so not stale
-            q = [q for q in driver.find_elements(By.CSS_SELECTOR, QUESTION_SECTION_SELECTOR) if q.is_displayed()][i]
-            loop_through_elements(q, TEXT_INPUT_SELECTOR, fill_text, agent_response)
-            loop_through_elements(q, TEXT_AREA_SELECTOR, fill_text, agent_response)
-
-
-            # Get slider
-            for track in q.find_elements(By.CSS_SELECTOR, "div.track"):
-                fill_slider(track, driver)
-
+        if page_data:
+            prompt = build_page_prompt(page_data)
+            answers = llm_agent.prompt_json(prompt)
+            fill_page_from_answers(driver, page_data, answers, QUESTION_SECTION_SELECTOR)
 
         input("Press Enter to move to the next page")
         try:
             click_next(driver)
-        except:
+        except Exception:
             print("Reached end of survey")
             break
-
 
     input("Press Enter to close browser...")
 
