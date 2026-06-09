@@ -25,7 +25,8 @@ def generate_llm_agent() -> GPT:
     MODEL = "gpt-5-nano"
     AGENT_DESCRIPTION = (
         "You are an agent used as an automated bot to test the security of a survey. "
-        "Answer questions as an average person would. Do not reveal you are a bot."
+        "Answer questions as an average person would. Do not reveal you are a bot." \
+        "Always accept the consent form."
     )
     # Fewshot example teaching the model the expected JSON response structure.
     # Shows one of each question type so it learns the key/value format before
@@ -33,21 +34,21 @@ def generate_llm_agent() -> GPT:
     RESPONSE_FORMAT_EXAMPLE = {
         "prompt": json.dumps([
             {"key": "q_0", "question": "How are you feeling today?", "type": "radio",
-             "options": ["Great", "Okay", "Not great"]},
+             "options": ["1\nNot at all", "2\nA little", "3\nModerately", "4\nQuite a bit", "5\nExtremely"]},
             {"key": "q_1", "question": "Tell us about yourself.", "type": "text"},
             {"key": "q_2", "question": "How satisfied are you overall?", "type": "slider",
              "min": 0, "max": 100},
             {"key": "q_3", "question": "Rate each aspect of your experience.", "type": "matrix",
              "rows": [
-                 {"key": "row_0", "text": "Speed", "options": ["Poor", "Average", "Excellent"]},
-                 {"key": "row_1", "text": "Cost",  "options": ["Poor", "Average", "Excellent"]},
+                 {"key": "row_0", "text": "Speed", "options": ["1\nNot at all", "2\nA little", "3\nModerately", "4\nQuite a bit", "5\nExtremely"]},
+                 {"key": "row_1", "text": "Cost",  "options": ["1\nNot at all", "2\nA little", "3\nModerately", "4\nQuite a bit", "5\nExtremely"]},
              ]},
         ], indent=2),
         "response": json.dumps({
-            "q_0": "Okay",
+            "q_0": "3\nModerately",
             "q_1": "I am a college student who enjoys spending time outdoors.",
             "q_2": 68,
-            "q_3": {"row_0": "Average", "row_1": "Excellent"},
+            "q_3": {"row_0": "2\nA little", "row_1": "4\nQuite a bit"},
         }),
     }
 
@@ -90,26 +91,34 @@ def fill_text(field: webdriver.remote.webelement.WebElement, text: str) -> None:
 def fill_radio(
     labels: list[webdriver.remote.webelement.WebElement],
     answer: str,
+    options: list[str],
     driver: Optional[webdriver.remote.webdriver.WebDriver] = None,
 ) -> None:
     """
-    Click the radio label whose text matches answer. Does nothing if the list is
-    empty or no label matches.
+    Click the label at the index matching answer in options. Does nothing if
+    the list is empty or answer is not found in options.
 
     Args:
         labels: Radio button label elements from a single question group.
-        answer: Answer text to match against label text (case-insensitive).
+        answer: Answer text to find in options (case-insensitive).
+        options: Known option strings in the same order as labels.
         driver: WebDriver instance. Required when elements are not directly clickable
             (e.g. tabindex="-1").
     """
     if not labels:
         return
-    for label in labels:
-        if label.text.strip().lower() == str(answer).strip().lower():
+
+    def normalize(s):
+        # Collapse all whitespace (spaces, newlines, tabs) to single spaces
+        return " ".join(str(s).split()).lower()
+
+    normalized = normalize(answer)
+    for i, opt in enumerate(options):
+        if normalize(opt) == normalized and i < len(labels):
             if driver:
-                driver.execute_script("arguments[0].click();", label)
+                driver.execute_script("arguments[0].click();", labels[i])
             else:
-                label.click()
+                labels[i].click()
             return
 
 
@@ -233,6 +242,8 @@ def build_page_prompt(page_data: list[dict]) -> str:
     """
     questions = []
     for q in page_data:
+        if q["type"] == "unknown":
+            continue
         entry = {"key": q["key"], "question": q["question"], "type": q["type"]}
         if q["type"] == "radio":
             entry["options"] = q["options"]
@@ -243,7 +254,11 @@ def build_page_prompt(page_data: list[dict]) -> str:
             entry["max"] = q["max"]
         questions.append(entry)
 
-    return json.dumps(questions, indent=2)
+    if not questions:
+        return ""
+
+    INSTRUCTIONS = "Answer each question. Return a JSON object keyed by each question's key:\n\n"
+    return INSTRUCTIONS + json.dumps(questions, indent=2)
 
 
 def fill_page_from_answers(
@@ -280,11 +295,11 @@ def fill_page_from_answers(
                 # answer is {"row_0": "<col>", "row_1": "<col>", ...}
                 row_answer = answer.get(f"row_{j}") if isinstance(answer, dict) else None
                 labels = row_el.find_elements(By.CSS_SELECTOR, "label.single-answer")
-                fill_radio(labels, row_answer, driver)
+                fill_radio(labels, row_answer, q_info["rows"][j]["options"], driver)
 
         elif q_info["type"] == "radio":
             labels = q.find_elements(By.CSS_SELECTOR, "label.SingleAnswer")
-            fill_radio(labels, answer)
+            fill_radio(labels, answer, q_info["options"])
 
         elif q_info["type"] == "slider":
             for track in q.find_elements(By.CSS_SELECTOR, "div.track"):
@@ -322,9 +337,14 @@ def main() -> None:
 
         if page_data:
             prompt = build_page_prompt(page_data)
-            answers = llm_agent.prompt_json(prompt)
-            fill_page_from_answers(driver, page_data, answers, QUESTION_SECTION_SELECTOR)
-
+            print("PROMPT:", prompt)
+            if prompt: 
+                answers = llm_agent.prompt_json(prompt)
+                print(answers)
+                fill_page_from_answers(driver, page_data, answers, QUESTION_SECTION_SELECTOR)
+            else:
+                print("No questions to fill-in on this page.")
+                
         input("Press Enter to move to the next page")
         try:
             click_next(driver)
