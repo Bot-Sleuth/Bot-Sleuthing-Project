@@ -337,10 +337,8 @@ def main() -> None:
 
         if page_data:
             prompt = build_page_prompt(page_data)
-            print("PROMPT:", prompt)
             if prompt: 
                 answers = llm_agent.prompt_json(prompt)
-                print(answers)
                 fill_page_from_answers(driver, page_data, answers, QUESTION_SECTION_SELECTOR)
             else:
                 print("No questions to fill-in on this page.")
