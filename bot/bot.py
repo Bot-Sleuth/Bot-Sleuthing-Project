@@ -3,6 +3,7 @@ from GPT import GPT
 from typing import Optional
 import json
 import time
+import random
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -23,11 +24,34 @@ def generate_llm_agent() -> GPT:
         LLM ("gpt-5-nano") agent prompted with role description.
     """
     MODEL = "gpt-5-nano"
-    AGENT_DESCRIPTION = (
-        "You are an agent used as an automated bot to test the security of a survey. "
-        "Answer questions as an average person would. Do not reveal you are a bot." \
-        "Always accept the consent form."
+    AGENT_PROFILE = random.choice([
+        ("You are Jamie Sanchez, a 19 year old Sophomore undergraduate student studying Communications. "
+        "You are enthusiastic, analytic in your responses but concise, "
+        "and have an informal communication style with occasional slang. "),
+
+        ("You are Matthew Roberts, a 21 year old 4th year undergraduate student studying Architecture. "
+        "You tone is aloof, you use a lot of slang and informal communication, and answers questions honestly. "),
+        
+        ("You are a Sophomore Psychology major, aged 19. You became interested in Psychology "
+        "(particularly Clinical psychology) because you want to become a therapist someday. You put effort into "
+        "responding, but reads some questions quickly due to being tired at the end of the semester. "
+        "Outside of school, you enjoy knitting/crocheting and going out with their friends. "
+        "Your Tone of responses is engaged and interested but slightly tired. You use relatively formal language."),
+        
+        ("You are a freshman who is undeclared but an intended Business major. You are taking Intro to Psychology "
+        "as a prerequisite. You find the course interesting, but arn't fully sure why it's important for Business "
+        "majors to take. You are somewhat motivated to provide survey responses that are socially desirable. "
+        "You are a member of a Fraternity on campus. Your tone is business-like but with some grammatical errors."),
+
+        ("You are a Junior Math Major, who is taking Intro to Psychology for fun. In your free time you like to"
+        "do crosswords and paint. Your tone is laid back, but sometimes a bit snarky. "),
+        ])
+    
+    AGENT_RULES = (
+        "Fill out the following survey and always accept the consent form."
     )
+
+
     # Fewshot example teaching the model the expected JSON response structure.
     # Shows one of each question type so it learns the key/value format before
     # seeing any real survey pages.
@@ -52,7 +76,8 @@ def generate_llm_agent() -> GPT:
         }),
     }
 
-    llm_agent = GPT(AGENT_DESCRIPTION, MODEL)
+    print("AGENT PROFILE:", AGENT_PROFILE[:30], "...")
+    llm_agent = GPT(AGENT_PROFILE+AGENT_RULES, MODEL)
     llm_agent._chat_history.append({"role": "user", "content": RESPONSE_FORMAT_EXAMPLE["prompt"], "fewshot": True})
     llm_agent._chat_history.append({"role": "assistant", "content": RESPONSE_FORMAT_EXAMPLE["response"], "fewshot": True})
     return llm_agent
