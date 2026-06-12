@@ -10,7 +10,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
-from bs4 import BeautifulSoup
+from selenium.common.exceptions import TimeoutException
 
 
 ################################## CONSTANTS ##################################
@@ -350,14 +350,14 @@ def main() -> None:
     QUESTION_SECTION_SELECTOR = "div.QuestionOuter"
 
     while True:
-        time.sleep(1)
+        time.sleep(3)
 
-        soup = BeautifulSoup(driver.page_source, "html.parser")
-        with open("bot/survey_page.html", "w", encoding="utf-8") as f:
-            f.write(soup.prettify())
-
-        wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, QUESTION_SECTION_SELECTOR)))
-
+        try:
+            wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, QUESTION_SECTION_SELECTOR)))
+        except TimeoutException:
+            print("Timed out waiting for questions. Exiting survey.")
+            return
+        
         page_data = extract_page_questions(driver, QUESTION_SECTION_SELECTOR)
 
         if page_data:
@@ -368,14 +368,11 @@ def main() -> None:
             else:
                 print("No questions to fill-in on this page.")
                 
-        input("Press Enter to move to the next page")
         try:
             click_next(driver)
         except Exception:
-            print("Reached end of survey")
+            print("Reached end of survey.")
             break
-
-    input("Press Enter to close browser...")
 
 
 if __name__ == "__main__":
