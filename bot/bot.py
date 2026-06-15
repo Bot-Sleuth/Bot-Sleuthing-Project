@@ -1,14 +1,17 @@
 from GPT import GPT
 
 from typing import Optional
+import argparse
 import json
 import time
 import random
 
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException
 
@@ -166,7 +169,7 @@ def fill_slider(
     val = max(min_val, min(max_val, int(value)))
     driver.execute_script("arguments[0].focus();", track)
     # HOME resets to minimum; each ARROW_RIGHT increments by one unit
-    track.send_keys(Keys.HOME + Keys.ARROW_RIGHT * (val - min_val))
+    ActionChains(driver).send_keys(Keys.HOME + Keys.ARROW_RIGHT * (val - min_val)).perform()
 
 
 def click_next(driver: webdriver.remote.webdriver.WebDriver) -> None:
@@ -324,7 +327,7 @@ def fill_page_from_answers(
 
         elif q_info["type"] == "radio":
             labels = q.find_elements(By.CSS_SELECTOR, "label.SingleAnswer")
-            fill_radio(labels, answer, q_info["options"])
+            fill_radio(labels, answer, q_info["options"], driver)
 
         elif q_info["type"] == "slider":
             for track in q.find_elements(By.CSS_SELECTOR, "div.track"):
@@ -340,10 +343,18 @@ def main() -> None:
     """
     Launch the browser, fill out the survey form, and submit it.
     """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--visible", action="store_true", help="Run browser in visible (non-headless) mode")
+    args = parser.parse_args()
 
     llm_agent = generate_llm_agent()
 
-    driver = webdriver.Chrome()
+    options = webdriver.ChromeOptions()
+    if not args.visible:
+        options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+    driver = webdriver.Chrome(service=Service("/usr/bin/chromedriver"), options=options)
     driver.get(SURVEY_URL)
 
     wait = WebDriverWait(driver, 10)
