@@ -4,12 +4,14 @@ steps:
       - build
       - -t
       - us-central1-docker.pkg.dev/$PROJECT_ID/bot-repo/bot-sleuthing-project:$COMMIT_SHA
-      - .
+      - bot/
 
   - name: gcr.io/cloud-builders/docker
     args:
       - push
       - us-central1-docker.pkg.dev/$PROJECT_ID/bot-repo/bot-sleuthing-project:$COMMIT_SHA
+
+
 
 images:
   - us-central1-docker.pkg.dev/$PROJECT_ID/bot-repo/bot-sleuthing-project:$COMMIT_SHA
