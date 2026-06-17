@@ -3,17 +3,17 @@ steps:
     args:
       - build
       - -t
-      - us-central1-docker.pkg.dev/psychbot-499512/bot-sleuthing-project/bot-sleuthing-project:$COMMIT_SHA
+      - us-central1-docker.pkg.dev/psychbot-499512/cloud-run-source-deploy/bot-sleuthing-project/bot-sleuthing-project:$COMMIT_SHA
       - bot/
 
   - name: gcr.io/cloud-builders/docker
     args:
       - push
-      - us-central1-docker.pkg.dev/psychbot-499512/bot-sleuthing-project/bot-sleuthing-project:$COMMIT_SHA
+      - us-central1-docker.pkg.dev/psychbot-499512/cloud-run-source-deploy/bot-sleuthing-project/bot-sleuthing-project:$COMMIT_SHA
 
 
 
 images:
-  - us-central1-docker.pkg.dev/psychbot-499512/bot-sleuthing-project/bot-sleuthing-project:$COMMIT_SHA
+  - us-central1-docker.pkg.dev/psychbot-499512/cloud-run-source-deploy/bot-sleuthing-project/bot-sleuthing-project:$COMMIT_SHA
 options:
   logging: CLOUD_LOGGING_ONLY
