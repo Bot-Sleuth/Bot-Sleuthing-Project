@@ -3,13 +3,13 @@ steps:
     args:
       - build
       - -t
-      - us-central1-docker.pkg.dev/$PROJECT_ID/bot-repo/bot-sleuthing-project:$COMMIT_SHA
+      - us-central1-docker.pkg.dev/psychbot-499512/bot-sleuthing-project/bot-sleuthing-project:$COMMIT_SHA
       - bot/
 
   - name: gcr.io/cloud-builders/docker
     args:
       - push
-      - us-central1-docker.pkg.dev/$PROJECT_ID/bot-repo/bot-sleuthing-project:$COMMIT_SHA
+      - us-central1-docker.pkg.dev/psychbot-499512/bot-sleuthing-project/bot-sleuthing-project:$COMMIT_SHA
 
 
 
