@@ -35,4 +35,3 @@ cd bot
 docker build -t sleuth-bot-image .
 docker run --rm --name sleuth-bot-container --env-file .env sleuth-bot-image
 ```
-
