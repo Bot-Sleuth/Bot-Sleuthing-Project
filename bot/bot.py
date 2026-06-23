@@ -176,10 +176,15 @@ def click_next(driver: webdriver.remote.webdriver.WebDriver) -> None:
     """
     Click the next/submit button to advance to the next survey page.
 
+    Waits for the Qualtrics page body to leave its Inactive transition state
+    and for the NextButton to become enabled before clicking.
+
     Args:
         driver: The Selenium WebDriver instance controlling the browser.
     """
-    next_button = driver.find_element(By.ID, "NextButton")
+    wait = WebDriverWait(driver, 10)
+    wait.until(lambda d: "Inactive" not in d.find_element(By.TAG_NAME, "body").get_attribute("class"))
+    next_button = wait.until(EC.element_to_be_clickable((By.ID, "NextButton")))
     next_button.click()
 
 
@@ -354,7 +359,7 @@ def main() -> None:
         options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
-    driver = webdriver.Chrome(service=Service("/usr/bin/chromedriver"), options=options)
+    driver = webdriver.Chrome(options=options)
     driver.get(SURVEY_URL)
 
     wait = WebDriverWait(driver, 10)
