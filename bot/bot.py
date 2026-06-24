@@ -15,6 +15,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException
 
+from bs4 import BeautifulSoup # TODO: REMOVE
 
 ################################## CONSTANTS ##################################
 SURVEY_URL = "https://uwmadison.co1.qualtrics.com/jfe/form/SV_erguoR327iDs8CO"
@@ -143,11 +144,13 @@ def fill_radio(
     normalized = normalize(answer)
     for i, opt in enumerate(options):
         if normalize(opt) == normalized and i < len(labels):
+            print(f"[DEBUG] fill_radio matched option index={i} value={opt!r}")  # TODO: Delete
             if driver:
                 driver.execute_script("arguments[0].click();", labels[i])
             else:
                 labels[i].click()
             return
+    print(f"[DEBUG] fill_radio no match for answer={answer!r} in options={options}")  # TODO: Delete
 
 
 def fill_slider(
@@ -167,9 +170,9 @@ def fill_slider(
     min_val = int(track.get_attribute("aria-valuemin") or 0)
     max_val = int(track.get_attribute("aria-valuemax") or 100)
     val = max(min_val, min(max_val, int(value)))
-    driver.execute_script("arguments[0].focus();", track)
-    # HOME resets to minimum; each ARROW_RIGHT increments by one unit
-    ActionChains(driver).send_keys(Keys.HOME + Keys.ARROW_RIGHT * (val - min_val)).perform()
+    print(f"[DEBUG] fill_slider min={min_val} max={max_val} target={value} clamped={val}")  # TODO: Delete
+    # click() establishes focus within the same chain so keys reach the slider in headless
+    ActionChains(driver).click(track).send_keys(Keys.HOME + Keys.ARROW_RIGHT * (val - min_val)).perform()
 
 
 def click_next(driver: webdriver.remote.webdriver.WebDriver) -> None:
@@ -183,8 +186,20 @@ def click_next(driver: webdriver.remote.webdriver.WebDriver) -> None:
         driver: The Selenium WebDriver instance controlling the browser.
     """
     wait = WebDriverWait(driver, 10)
-    wait.until(lambda d: "Inactive" not in d.find_element(By.TAG_NAME, "body").get_attribute("class"))
+    try:
+        wait.until(lambda d: "Inactive" not in d.find_element(By.TAG_NAME, "body").get_attribute("class"))
+        print("[DEBUG] click_next: body left Inactive state")  # TODO: Delete
+    except TimeoutException:
+        print("[DEBUG] click_next: timed out waiting for Inactive — checking for modal")  # TODO: Delete
+        continue_btns = driver.find_elements(By.XPATH, "//*[contains(text(), 'Continue Without Answering')]")
+        if not continue_btns:
+            raise
+        print("[DEBUG] click_next: dismissing 'Response Requested' modal")  # TODO: Delete
+        continue_btns[0].click()
+        wait.until(lambda d: "Inactive" not in d.find_element(By.TAG_NAME, "body").get_attribute("class"))
+        print("[DEBUG] click_next: body left Inactive state after modal dismiss")  # TODO: Delete
     next_button = wait.until(EC.element_to_be_clickable((By.ID, "NextButton")))
+    print("[DEBUG] click_next: clicking NextButton")  # TODO: Delete
     next_button.click()
 
 
@@ -314,6 +329,7 @@ def fill_page_from_answers(
     """
     for q_info in page_data:
         answer = answers.get(q_info["key"])
+        print(f"[DEBUG] Filling q_key={q_info['key']} type={q_info['type']} answer={answer}")  # TODO: Delete
         if answer is None:
             continue
 
@@ -368,6 +384,12 @@ def main() -> None:
     while True:
         time.sleep(3)
 
+        # TODO: REMOVE
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+        print("\n".join(line for line in soup.get_text(separator="\n").splitlines() if line.strip()))
+        print("------------------------------------------------------------")
+
         try:
             wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, QUESTION_SECTION_SELECTOR)))
         except TimeoutException:
@@ -375,20 +397,20 @@ def main() -> None:
             return
         
         page_data = extract_page_questions(driver, QUESTION_SECTION_SELECTOR)
+        print(f"[DEBUG] Extracted {len(page_data)} questions: {[q['type'] for q in page_data]}")  # TODO: Delete
 
         if page_data:
             prompt = build_page_prompt(page_data)
-            if prompt: 
+            print(f"[DEBUG] Prompt:\n{prompt}")  # TODO: Delete
+            if prompt:
                 answers = llm_agent.prompt_json(prompt)
+                print(f"[DEBUG] LLM answers: {answers}")  # TODO: Delete
                 fill_page_from_answers(driver, page_data, answers, QUESTION_SECTION_SELECTOR)
             else:
                 print("No questions to fill-in on this page.")
-                
-        try:
-            click_next(driver)
-        except Exception:
-            print("Reached end of survey.")
-            break
+
+        click_next(driver)
+
 
 
 if __name__ == "__main__":

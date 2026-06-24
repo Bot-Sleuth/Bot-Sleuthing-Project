@@ -2,3 +2,6 @@ requests
 selenium
 python-dotenv
 openai
+
+# TODO: REMOVE
+beautifulsoup4
