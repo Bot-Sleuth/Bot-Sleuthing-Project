@@ -13,7 +13,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
 
 
 ################################## CONSTANTS ##################################
@@ -27,28 +27,33 @@ def generate_llm_agent() -> GPT:
         LLM ("gpt-5-nano") agent prompted with role description.
     """
     MODEL = "gpt-5-nano"
-    AGENT_PROFILE = random.choice([
-        ("You are Jamie Sanchez, a 19 year old Sophomore undergraduate student studying Communications. "
-        "You are enthusiastic, analytic in your responses but concise, "
-        "and have an informal communication style with occasional slang. "),
+    profile_name, profile_prompt = random.choice([
+        ("Jamie Sanchez | Sophomore, Communications | 19yo",
+         "You are Jamie Sanchez, a 19 year old Sophomore undergraduate student studying Communications. "
+         "You are enthusiastic, analytic in your responses but concise, "
+         "and have an informal communication style with occasional slang. "),
 
-        ("You are Matthew Roberts, a 21 year old 4th year undergraduate student studying Architecture. "
-        "You tone is aloof, you use a lot of slang and informal communication, and answers questions honestly. "),
-        
-        ("You are a Sophomore Psychology major, aged 19. You became interested in Psychology "
-        "(particularly Clinical psychology) because you want to become a therapist someday. You put effort into "
-        "responding, but reads some questions quickly due to being tired at the end of the semester. "
-        "Outside of school, you enjoy knitting/crocheting and going out with their friends. "
-        "Your Tone of responses is engaged and interested but slightly tired. You use relatively formal language."),
-        
-        ("You are a freshman who is undeclared but an intended Business major. You are taking Intro to Psychology "
-        "as a prerequisite. You find the course interesting, but arn't fully sure why it's important for Business "
-        "majors to take. You are somewhat motivated to provide survey responses that are socially desirable. "
-        "You are a member of a Fraternity on campus. Your tone is business-like but with some grammatical errors."),
+        ("Matthew Roberts | Senior, Architecture | 21yo",
+         "You are Matthew Roberts, a 21 year old 4th year undergraduate student studying Architecture. "
+         "You tone is aloof, you use a lot of slang and informal communication, and answers questions honestly. "),
 
-        ("You are a Junior Math Major, who is taking Intro to Psychology for fun. In your free time you like to"
-        "do crosswords and paint. Your tone is laid back, but sometimes a bit snarky. "),
-        ])
+        ("Anonymous | Sophomore, Psychology | 19yo",
+         "You are a Sophomore Psychology major, aged 19. You became interested in Psychology "
+         "(particularly Clinical psychology) because you want to become a therapist someday. You put effort into "
+         "responding, but reads some questions quickly due to being tired at the end of the semester. "
+         "Outside of school, you enjoy knitting/crocheting and going out with their friends. "
+         "Your Tone of responses is engaged and interested but slightly tired. You use relatively formal language."),
+
+        ("Anonymous | Freshman, undeclared (intended Business) | Frat member",
+         "You are a freshman who is undeclared but an intended Business major. You are taking Intro to Psychology "
+         "as a prerequisite. You find the course interesting, but arn't fully sure why it's important for Business "
+         "majors to take. You are somewhat motivated to provide survey responses that are socially desirable. "
+         "You are a member of a Fraternity on campus. Your tone is business-like but with some grammatical errors."),
+
+        ("Anonymous | Junior, Math | taking Psych for fun",
+         "You are a Junior Math Major, who is taking Intro to Psychology for fun. In your free time you like to "
+         "do crosswords and paint. Your tone is laid back, but sometimes a bit snarky. "),
+    ])
     
     AGENT_RULES = (
         "Fill out the following survey as your character and always accept the consent form. "
@@ -89,8 +94,8 @@ def generate_llm_agent() -> GPT:
     }
 
 
-    print("AGENT PROFILE:", AGENT_PROFILE[:30], "...")
-    llm_agent = GPT(AGENT_PROFILE+AGENT_RULES, MODEL)
+    print(f"AGENT PROFILE: {profile_name}")
+    llm_agent = GPT(profile_prompt + AGENT_RULES, MODEL)
     llm_agent._chat_history.append({"role": "user", "content": RESPONSE_FORMAT_EXAMPLE["prompt"], "fewshot": True})
     llm_agent._chat_history.append({"role": "assistant", "content": RESPONSE_FORMAT_EXAMPLE["response"], "fewshot": True})
     return llm_agent
@@ -232,15 +237,19 @@ def extract_page_questions(
             q_info["type"] = "matrix"
             q_info["rows"] = []
             for j, row in enumerate(rows):
-                row_label_els = row.find_elements(By.CSS_SELECTOR, "th, td.ChoiceTextCell, .RowLabel")
-                row_text = row_label_els[0].text.strip() if row_label_els else f"Row {j + 1}"
-                labels = row.find_elements(By.CSS_SELECTOR, "label.single-answer")
-                if col_headers:
-                    options = col_headers
-                else:
-                    options = [l.text.strip() for l in labels]
-                    if not any(options):
-                        options = [f"option_{k}" for k in range(len(labels))]
+                try:
+                    row_label_els = row.find_elements(By.CSS_SELECTOR, "th, td.ChoiceTextCell, .RowLabel")
+                    row_text = row_label_els[0].text.strip() if row_label_els else f"Row {j + 1}"
+                    labels = row.find_elements(By.CSS_SELECTOR, "label.single-answer")
+                    if col_headers:
+                        options = col_headers
+                    else:
+                        options = [l.text.strip() for l in labels]
+                        if not any(options):
+                            options = [f"option_{k}" for k in range(len(labels))]
+                except StaleElementReferenceException:
+                    row_text = f"Row {j + 1}"
+                    options = col_headers or []
                 q_info["rows"].append({"key": f"row_{j}", "text": row_text, "options": options})
         else:
             radio_labels = q.find_elements(By.CSS_SELECTOR, "label.SingleAnswer")
