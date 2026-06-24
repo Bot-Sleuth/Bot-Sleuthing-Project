@@ -51,7 +51,14 @@ def generate_llm_agent() -> GPT:
         ])
     
     AGENT_RULES = (
-        "Fill out the following survey and always accept the consent form."
+        "Fill out the following survey as your character and always accept the consent form. "
+        "For text questions, write like a real college student typing quickly. Keep it short (1 sentence or a phrase) and "
+        "use casual punctuation. Occasionally include fragmented sentences and typos. "
+        "Never write formally structured paragraphs or bullet points. "
+        "If asked to recall or recite something specific (a law, a video you supposedly watched, a memorized text), "
+        "give a vague or imperfect attempt, skip parts, or admit you don't fully remember. "
+        "Do not use AI-sounding phrases like 'Certainly', 'Of course', 'In conclusion', or 'As a student'. "
+        "Do not start every sentence with 'I'."
     )
 
 
@@ -70,14 +77,17 @@ def generate_llm_agent() -> GPT:
                  {"key": "row_0", "text": "Speed", "options": ["1\nNot at all", "2\nA little", "3\nModerately", "4\nQuite a bit", "5\nExtremely"]},
                  {"key": "row_1", "text": "Cost",  "options": ["1\nNot at all", "2\nA little", "3\nModerately", "4\nQuite a bit", "5\nExtremely"]},
              ]},
+             {"key": "q_4", "question": "Please recite the first amendment to the US Constitution.", "type": "text"},
         ], indent=2),
         "response": json.dumps({
             "q_0": "3\nModerately",
-            "q_1": "I am a college student who enjoys spending time outdoors.",
+            "q_1": "just a college student, trying to get through finals",
             "q_2": 68,
             "q_3": {"row_0": "2\nA little", "row_1": "4\nQuite a bit"},
+            "q_4": "something about freedom of speech and religion idk, like congress cant make laws restricting that stuff",
         }),
     }
+
 
     print("AGENT PROFILE:", AGENT_PROFILE[:30], "...")
     llm_agent = GPT(AGENT_PROFILE+AGENT_RULES, MODEL)
