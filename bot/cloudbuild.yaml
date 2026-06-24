@@ -23,6 +23,16 @@ steps:
       - --region
       - us-central1
 
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - jobs
+      - execute
+      - bot-sleuthing-job
+      - --region
+      - us-central1
+
 images:
   - us-central1-docker.pkg.dev/psychbot-499512/cloud-run-source-deploy/bot-sleuthing-project/bot-sleuthing-project:$COMMIT_SHA
 options:
