@@ -24,9 +24,9 @@ SURVEY_URL = "https://uwmadison.co1.qualtrics.com/jfe/form/SV_erguoR327iDs8CO"
 def generate_llm_agent() -> GPT:
     """
     Returns:
-        LLM ("gpt-5-nano") agent prompted with role description.
+        LLM ("gpt-5.4-nano") agent prompted with role description.
     """
-    MODEL = "gpt-5-nano"
+    MODEL = "gpt-5.4-nano"
     profile_name, profile_prompt = random.choice([
         ("[1] Jamie Sanchez | Sophomore, Communications | 19yo",
          "You are Jamie Sanchez, a 19 year old Sophomore undergraduate student studying Communications. "
