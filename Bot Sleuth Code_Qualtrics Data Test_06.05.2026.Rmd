@@ -284,8 +284,8 @@ results_freeipapi <- purrr::map_dfr(chunks, \(ch) {
       warning("Batch failed: ", conditionMessage(e))
       tibble(query = ch, error = conditionMessage(e))
     }
-    ,
-        Sys.sleep(120)
+    # ,
+    #     # Sys.sleep(120)
   )
 })
 results_freeipapi
@@ -488,8 +488,6 @@ combined_results <- combined_results %>%
     city_match_5 = partial_match(ipapi_city,freeipapi_cityName), # no
     city_match_6 = partial_match(ipinfo_city,freeipapi_cityName) # no
   )
-
-combined_results %>% select(grep("city_match",names(combined_results)),ipquery_location.city,ipapi_city,ipinfo_city,freeipapi_cityName) %>% arrange(desc(city_match_n))
 ```
 
 Creating a var showing number of pairwise matches:
@@ -499,6 +497,7 @@ combined_results$city_match_n <- combined_results %>% select(city_match_1:city_m
 
 combined_results %>% select(city_match_n, city_match_1:city_match_6)
 combined_results %>% select(city_match_n,ipquery_location.city,ipapi_city,ipinfo_city,freeipapi_cityName) %>% arrange(desc(city_match_n))
+combined_results %>% select(grep("city_match",names(combined_results)),ipquery_location.city,ipapi_city,ipinfo_city,freeipapi_cityName) %>% arrange(desc(city_match_n))
 
 table(combined_results$city_match_n)
 ```
@@ -530,9 +529,6 @@ combined_results <- combined_results %>%
     region_match_5 = partial_match(ipinfo_region,freeipapi_regionName),
     region_match_6 = partial_match(ipquery_location.state,freeipapi_regionName )
   )
-
-combined_results %>% select(grep("region_match",names(combined_results)),ipapi_regionName,ipinfo_region,freeipapi_regionName,ipquery_location.state) %>% arrange(desc(region_match_n))
-table(combined_results$region_match_n)
 ```
 
 Creating a var showing number of pairwise matches:
@@ -541,9 +537,29 @@ Creating a var showing number of pairwise matches:
 combined_results$region_match_n <- combined_results %>% select(region_match_1:region_match_6) %>% rowSums()
 
 combined_results %>% select(region_match_n, region_match_1:region_match_6)
+
+combined_results %>% select(grep("region_match",names(combined_results)),ipapi_regionName,ipinfo_region,freeipapi_regionName,ipquery_location.state) %>% arrange(desc(region_match_n))
+table(combined_results$region_match_n)
 ```
 
+## Merge
 
+Merging our updated IP data back into the original data
+
+```{r}
+# join to original data
+d_ips <- ip_locations_raw |>
+  mutate(ip_address = as.character(ip_address) |> str_trim()) |>
+  left_join(combined_results, by = c("ip_address" = "query"))
+```
+
+```{r}
+# duplicate IP address flag
+d_ips  <- d_ips  |>
+  add_count(ip_address, name = "ip_count") |>
+  mutate(dup_ip = ip_count > 1)
+table(d_ips$dup_ip)
+```
 
 #### Transform Geo Mismatch Data
 
@@ -637,7 +653,6 @@ d_ips <- ip_locations_raw |>
 d_ips  <- d_ips  |>
   add_count(ip_address, name = "ip_count") |>
   mutate(dup_ip = ip_count > 1)
-table(d_ips$dup_ip)
 ```
 
 
@@ -647,7 +662,7 @@ table(d_ips$dup_ip)
 
 # AC note: not fully sure how to incorporate these. but, a way to automate this could be to calculate these counts, then feed in the ISP names with counts above a certain threshold into the previous code where we're flagging specific names. 
 
-# AC note: **need to change this so that it doesn't flag common ISPs (e.g., AT&T) that are clearly legitimate companies**
+# AC NOTE: ideally need to change so that the isp names aren't split by source; or at least make a separate verison that isn't. when they're split this way, we can't get the accurate counts
 
 ```{r}
 isp_counts <- bind_rows(
@@ -660,6 +675,26 @@ isp_counts <- bind_rows(
 )
 isp_counts %>% arrange(desc(n))
 ```
+
+# create only one col with all isps, instead of having them split:
+
+```{r}
+
+```
+
+
+```{r}
+isp_counts_test <- bind_rows(
+  combined_results |> count(ipapi_isp,  name = "n") |> rename(isp = ipapi_isp) |> mutate(source = "ipapi_isp"),
+  combined_results |> count(ipinfo_org, name = "n") |> rename(isp = ipinfo_org) |> mutate(source = "ipinfo_org"),
+    combined_results |> count(ipapi_org, name = "n") |> rename(isp = ipapi_org) |> mutate(source = "ipapi_org"),
+      combined_results |> count(ipapi_as, name = "n") |> rename(isp = ipapi_as) |> mutate(source = "ipapi_as"),
+        combined_results |> count(ipquery_isp.isp, name = "n") |> rename(isp = ipquery_isp.isp) |> mutate(source = "ipquery_isp"),
+          combined_results |> count(freeipapi_asnOrganization, name = "n") |> rename(isp = freeipapi_asnOrganization) |> mutate(source = "freeipapi_asn")
+)
+isp_counts_test %>% arrange(desc(n))
+```
+
 
 Setting n for common ISPs to 0 so that they are not flagged.
 (ISPs are taken from this list: https://en.wikipedia.org/wiki/List_of_broadband_providers_in_the_United_States)
@@ -695,23 +730,28 @@ c("Comcast"	,
 library(stringr)
 
 # Make sure to use \b around each word to avoid partial matching.
-isp_counts$common_isp_test <-  str_detect(isp_counts$isp, pattern = paste(common_isps, sep="", collapse = "|"))
-table(matches)
+isp_counts$common_isp <-  str_detect(isp_counts$isp, pattern = paste(common_isps, sep="", collapse = "|"))
 
-isp_counts %>% select(isp,common_isp_test) %>% arrange(desc(common_isp_test))
+isp_counts %>% select(isp,common_isp) %>% arrange(desc(common_isp))
 ```
 
 # LEFT OFF HERE - 6/5/2026
 
 ```{r}
+isp_counts <- 
 isp_counts %>% mutate(n = case_when(
-  grepl(isp, common_isps) == T ~ 0, 
+  common_isp == T ~ 0, 
   TRUE ~ n
 ))
 
+isp_counts %>% arrange(desc(n))
 ```
 
 ## AC note: with all these threshold cut-offs, should set to calculate a % based on nrows in data
+
+possible ideas:
+
+
 
 ```{r}
 
