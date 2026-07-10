@@ -38,7 +38,7 @@ steps:
       - run
       - jobs
       - update
-      - bot-sleuthing-job
+      - bot-sleuthing-project
       - --image
       - us-central1-docker.pkg.dev/psychbot-499512/cloud-run-source-deploy/bot-sleuthing-project/bot-sleuthing-project:$COMMIT_SHA
       - --region
@@ -49,7 +49,7 @@ steps:
       - run
       - jobs
       - execute
-      - bot-sleuthing-job
+      - bot-sleuthing-project
       - --region
       - us-east1
 
@@ -59,7 +59,7 @@ steps:
       - run
       - jobs
       - update
-      - bot-sleuthing-job
+      - bot-sleuthing-project
       - --image
       - us-central1-docker.pkg.dev/psychbot-499512/cloud-run-source-deploy/bot-sleuthing-project/bot-sleuthing-project:$COMMIT_SHA
       - --region
@@ -70,7 +70,7 @@ steps:
       - run
       - jobs
       - execute
-      - bot-sleuthing-job
+      - bot-sleuthing-project
       - --region
       - us-east4
 
@@ -80,7 +80,7 @@ steps:
       - run
       - jobs
       - update
-      - bot-sleuthing-job
+      - bot-sleuthing-project
       - --image
       - us-central1-docker.pkg.dev/psychbot-499512/cloud-run-source-deploy/bot-sleuthing-project/bot-sleuthing-project:$COMMIT_SHA
       - --region
@@ -91,7 +91,7 @@ steps:
       - run
       - jobs
       - execute
-      - bot-sleuthing-job
+      - bot-sleuthing-project
       - --region
       - us-central5
 
