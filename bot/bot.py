@@ -123,6 +123,10 @@ def fill_text(field: webdriver.remote.webelement.WebElement, text: str) -> None:
     """
     if not field:
         return
+    
+    # Strip out non-BMS characters (i.e. emojis) since Selenium cannot write them
+    text = "".join(char for char in text if ord(char) <= 0xFFFF)
+    
     field.send_keys(text)
 
 
