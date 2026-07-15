@@ -195,7 +195,7 @@ def click_next(driver: webdriver.remote.webdriver.WebDriver) -> None:
     Args:
         driver: The Selenium WebDriver instance controlling the browser.
     """
-    wait = WebDriverWait(driver, 20)
+    wait = WebDriverWait(driver, 40)
     next_button = wait.until(EC.element_to_be_clickable((By.ID, "NextButton")))
     next_button.click()
 
