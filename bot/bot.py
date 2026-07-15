@@ -126,7 +126,7 @@ def fill_text(field: webdriver.remote.webelement.WebElement, text: str) -> None:
     
     # Strip out non-BMS characters (i.e. emojis) since Selenium cannot write them
     text = "".join(char for char in text if ord(char) <= 0xFFFF)
-    
+
     field.send_keys(text)
 
 
@@ -195,8 +195,7 @@ def click_next(driver: webdriver.remote.webdriver.WebDriver) -> None:
     Args:
         driver: The Selenium WebDriver instance controlling the browser.
     """
-    time.sleep(2)
-    wait = WebDriverWait(driver, 10)
+    wait = WebDriverWait(driver, 20)
     next_button = wait.until(EC.element_to_be_clickable((By.ID, "NextButton")))
     next_button.click()
 
