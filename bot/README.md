@@ -35,3 +35,16 @@ cd bot
 docker build -t sleuth-bot-image .
 docker run --rm --name sleuth-bot-container --env-file .env sleuth-bot-image
 ```
+
+
+## Scheduling Google Cloud Jobs [Debina/Ubuntu ONLY]
+If you want to schedule Google Cloud jobs on your Linux machine (Debian/Ubuntu), first install the Google Cloud CLI using [these instructions](https://docs.cloud.google.com/sdk/docs/install-sdk#deb). Then run the following to install additional dependencies and setup:
+
+```bash
+# Install at for scheduling
+sudo apt update && sudo apt install at
+
+# Init Google cloud account and sign in with your credentials
+gcloud init
+gcloud auth login
+```
