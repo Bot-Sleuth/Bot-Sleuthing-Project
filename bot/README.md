@@ -48,3 +48,14 @@ sudo apt update && sudo apt install at
 gcloud init
 gcloud auth login
 ```
+
+Run the following to schedule 275 jobs (ONLY RUN THIS ONCE):
+```bash
+# See the output without scheduling.
+python3 bot/scheduler.py
+
+# Queue all 275 triggers
+python3 bot/scheduler.py --enqueue
+```
+
+To view all scheduled triggers, you can run `atq`.
